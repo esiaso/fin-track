@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { @apply antialiased; }
+  body { @apply bg-canvas text-dark-5 dark:bg-canvas-dark dark:text-dark-6; }
+  h1, h2, h3, h4 { @apply text-dark dark:text-white; }
+}
+
+@layer components {
+  .card { @apply rounded-card bg-white shadow-card dark:bg-surface-dark dark:shadow-none; }
+  .input {
+    @apply w-full rounded-lg border border-stroke bg-transparent px-4 py-2.5 text-sm text-dark outline-none transition
+      placeholder:text-dark-6 focus:border-primary dark:border-stroke-dark dark:bg-[#0B1727] dark:text-white dark:focus:border-primary;
+  }
+  .label { @apply mb-2 block text-sm font-medium text-dark dark:text-white; }
+}
+
+.scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 9999px; }
+.dark .scrollbar-thin::-webkit-scrollbar-thumb { background: #27303E; }
