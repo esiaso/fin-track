@@ -1,0 +1,410 @@
+// FinTrack core ledger schema (Increment 1).
+// Conventions:
+//  - All money columns are NUMERIC(20,4); never float.
+//  - Snake_case table/column names in Postgres, camelCase in Prisma.
+//  - Posted journals and lines are immutable (enforced by DB triggers in migration SQL).
+//  - Audit log is hash-chained and append-only (DB trigger).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────────── Organisation ─────────────────────────────
+
+model Company {
+  id           String   @id @default(uuid()) @db.Uuid
+  code         String   @unique
+  name         String
+  baseCurrency String   @map("base_currency") @db.Char(3)
+  taxPin       String?  @map("tax_pin")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  facilities     Facility[]
+  accounts       Account[]
+  periods        FiscalPeriod[]
+  journals       Journal[]
+  accountMaps    AccountMapping[]
+  sequences      DocumentSequence[]
+
+  @@map("companies")
+}
+
+model Facility {
+  id         String   @id @default(uuid()) @db.Uuid
+  companyId  String   @map("company_id") @db.Uuid
+  code       String   @unique
+  name       String
+  // External id used by CliniTrack/SupplyTrack/PeopleTrack events (facility_id in the envelope)
+  externalId String   @unique @map("external_id")
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  company     Company      @relation(fields: [companyId], references: [id])
+  departments Department[]
+
+  @@index([companyId])
+  @@map("facilities")
+}
+
+model Department {
+  id         String  @id @default(uuid()) @db.Uuid
+  facilityId String  @map("facility_id") @db.Uuid
+  code       String
+  name       String
+  active     Boolean @default(true)
+
+  facility Facility @relation(fields: [facilityId], references: [id])
+
+  @@unique([facilityId, code])
+  @@map("departments")
+}
+
+// ───────────────────────────── Chart of accounts ─────────────────────────────
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum NormalBalance {
+  DEBIT
+  CREDIT
+}
+
+/// Control accounts may only be posted by their owning sub-ledger, never by manual journals.
+enum ControlAccountType {
+  NONE
+  AR_CONTROL
+  AP_CONTROL
+  PAYROLL_CONTROL
+  STATUTORY_CONTROL
+  DOCTOR_FUND_CONTROL
+  BANK
+  SUSPENSE
+  FX_CLEARING
+}
+
+model Account {
+  id            String             @id @default(uuid()) @db.Uuid
+  companyId     String             @map("company_id") @db.Uuid
+  code          String
+  name          String
+  type          AccountType
+  normalBalance NormalBalance      @map("normal_balance")
+  controlType   ControlAccountType @default(NONE) @map("control_type")
+  parentId      String?            @map("parent_id") @db.Uuid
+  isPostable    Boolean            @default(true) @map("is_postable")
+  /// Null = any currency allowed.
+  currency      String?            @db.Char(3)
+  active        Boolean            @default(true)
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  company  Company       @relation(fields: [companyId], references: [id])
+  parent   Account?      @relation("AccountTree", fields: [parentId], references: [id])
+  children Account[]     @relation("AccountTree")
+  lines    JournalLine[]
+  mappings AccountMapping[]
+
+  @@unique([companyId, code])
+  @@map("accounts")
+}
+
+/// Posting rules: maps a logical key (e.g. AR_CONTROL:SHA, REVENUE:LAB) to a GL account per company.
+model AccountMapping {
+  id         String   @id @default(uuid()) @db.Uuid
+  companyId  String   @map("company_id") @db.Uuid
+  mappingKey String   @map("mapping_key")
+  accountId  String   @map("account_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  company Company @relation(fields: [companyId], references: [id])
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@unique([companyId, mappingKey])
+  @@map("account_mappings")
+}
+
+// ───────────────────────────── Periods ─────────────────────────────
+
+enum PeriodStatus {
+  OPEN
+  SOFT_CLOSED
+  LOCKED
+}
+
+model FiscalPeriod {
+  id        String       @id @default(uuid()) @db.Uuid
+  companyId String       @map("company_id") @db.Uuid
+  code      String // e.g. 2026-11
+  startDate DateTime     @map("start_date") @db.Date
+  endDate   DateTime     @map("end_date") @db.Date
+  status    PeriodStatus @default(OPEN)
+  closedBy  String?      @map("closed_by") @db.Uuid
+  closedAt  DateTime?    @map("closed_at") @db.Timestamptz(6)
+
+  company  Company   @relation(fields: [companyId], references: [id])
+  journals Journal[]
+
+  @@unique([companyId, code])
+  @@index([companyId, startDate, endDate])
+  @@map("fiscal_periods")
+}
+
+// ───────────────────────────── Journals ─────────────────────────────
+
+enum JournalStatus {
+  DRAFT
+  VALIDATED
+  APPROVED
+  POSTED
+  REVERSED
+}
+
+enum JournalSource {
+  MANUAL
+  CLINITRACK
+  SUPPLYTRACK
+  PEOPLETRACK
+  FINTRACK
+}
+
+model Journal {
+  id              String        @id @default(uuid()) @db.Uuid
+  companyId       String        @map("company_id") @db.Uuid
+  facilityId      String?       @map("facility_id") @db.Uuid
+  journalNo       String?       @map("journal_no")
+  journalDate     DateTime      @map("journal_date") @db.Date
+  periodId        String        @map("period_id") @db.Uuid
+  description     String
+  status          JournalStatus @default(DRAFT)
+  source          JournalSource @default(MANUAL)
+  sourceEntityType String?      @map("source_entity_type")
+  sourceEntityId  String?       @map("source_entity_id")
+  sourceVersion   Int?          @map("source_version")
+  sourceEventId   String?       @map("source_event_id") @db.Uuid
+  correlationId   String?       @map("correlation_id")
+  /// Caller-provided or derived key; unique per company. Guarantees reruns never duplicate postings.
+  idempotencyKey  String        @map("idempotency_key")
+  reversalOfId    String?       @unique @map("reversal_of_id") @db.Uuid
+  createdBy       String        @map("created_by") @db.Uuid
+  validatedAt     DateTime?     @map("validated_at") @db.Timestamptz(6)
+  approvedBy      String?       @map("approved_by") @db.Uuid
+  approvedAt      DateTime?     @map("approved_at") @db.Timestamptz(6)
+  postedBy        String?       @map("posted_by") @db.Uuid
+  postedAt        DateTime?     @map("posted_at") @db.Timestamptz(6)
+  reversedAt      DateTime?     @map("reversed_at") @db.Timestamptz(6)
+  /// SHA-256 over the canonical posted content (header + lines); set at posting.
+  contentHash     String?       @map("content_hash")
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  company     Company        @relation(fields: [companyId], references: [id])
+  period      FiscalPeriod   @relation(fields: [periodId], references: [id])
+  lines       JournalLine[]
+  reversalOf  Journal?       @relation("Reversal", fields: [reversalOfId], references: [id])
+  reversedBy  Journal?       @relation("Reversal")
+  sourceEvent InboxEvent?    @relation(fields: [sourceEventId], references: [id])
+
+  @@unique([companyId, idempotencyKey])
+  @@unique([companyId, journalNo])
+  @@index([companyId, status, journalDate])
+  @@index([source, sourceEntityType, sourceEntityId])
+  @@map("journals")
+}
+
+model JournalLine {
+  id           String  @id @default(uuid()) @db.Uuid
+  journalId    String  @map("journal_id") @db.Uuid
+  lineNo       Int     @map("line_no")
+  accountId    String  @map("account_id") @db.Uuid
+  facilityId   String? @map("facility_id") @db.Uuid
+  departmentId String? @map("department_id") @db.Uuid
+  currency     String  @db.Char(3)
+  debit        Decimal @default(0) @db.Decimal(20, 4)
+  credit       Decimal @default(0) @db.Decimal(20, 4)
+  /// Rate to company base currency (1 when currency = base).
+  fxRate       Decimal @default(1) @map("fx_rate") @db.Decimal(20, 10)
+  baseDebit    Decimal @default(0) @map("base_debit") @db.Decimal(20, 4)
+  baseCredit   Decimal @default(0) @map("base_credit") @db.Decimal(20, 4)
+  description  String?
+  /// Analytic dimensions (payer, supplier, doctor, vote head, source line ...). No PII.
+  dimensions   Json    @default("{}")
+
+  journal Journal @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@unique([journalId, lineNo])
+  @@index([accountId])
+  @@map("journal_lines")
+}
+
+model DocumentSequence {
+  id        String @id @default(uuid()) @db.Uuid
+  companyId String @map("company_id") @db.Uuid
+  docType   String @map("doc_type")
+  prefix    String
+  nextValue Int    @default(1) @map("next_value")
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, docType])
+  @@map("document_sequences")
+}
+
+// ───────────────────────────── Integration inbox / outbox ─────────────────────────────
+
+enum InboxStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  IGNORED_DUPLICATE
+  FAILED
+  DEAD_LETTER
+}
+
+model InboxEvent {
+  id                String      @id @default(uuid()) @db.Uuid
+  sourceSystem      String      @map("source_system")
+  eventId           String      @map("event_id")
+  eventType         String      @map("event_type")
+  sourceEntityType  String      @map("source_entity_type")
+  sourceEntityId    String      @map("source_entity_id")
+  sourceVersion     Int         @map("source_version")
+  occurredAt        DateTime    @map("occurred_at") @db.Timestamptz(6)
+  facilityExtId     String      @map("facility_ext_id")
+  correlationId     String      @map("correlation_id")
+  payload           Json
+  payloadHash       String      @map("payload_hash")
+  signatureVerified Boolean     @map("signature_verified")
+  status            InboxStatus @default(RECEIVED)
+  attempts          Int         @default(0)
+  lastError         String?     @map("last_error")
+  nextAttemptAt     DateTime?   @map("next_attempt_at") @db.Timestamptz(6)
+  receivedAt        DateTime    @default(now()) @map("received_at") @db.Timestamptz(6)
+  processedAt       DateTime?   @map("processed_at") @db.Timestamptz(6)
+
+  journals Journal[]
+  traces   PostingTrace[]
+
+  @@unique([sourceSystem, eventId])
+  @@index([status, nextAttemptAt])
+  @@index([sourceSystem, sourceEntityType, sourceEntityId, sourceVersion])
+  @@map("inbox_events")
+}
+
+/// Upstream -> downstream traceability: one inbox event may produce several financial artefacts.
+model PostingTrace {
+  id           String   @id @default(uuid()) @db.Uuid
+  inboxEventId String   @map("inbox_event_id") @db.Uuid
+  targetType   String   @map("target_type") // JOURNAL, AP_INVOICE, DEBTOR_INVOICE ...
+  targetId     String   @map("target_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  inboxEvent InboxEvent @relation(fields: [inboxEventId], references: [id])
+
+  @@unique([inboxEventId, targetType, targetId])
+  @@index([targetType, targetId])
+  @@map("posting_traces")
+}
+
+/// Processed source entity versions: blocks reposting the same source document version under a new event_id.
+model SourceEntityVersion {
+  sourceSystem     String   @map("source_system")
+  sourceEntityType String   @map("source_entity_type")
+  sourceEntityId   String   @map("source_entity_id")
+  sourceVersion    Int      @map("source_version")
+  inboxEventId     String   @map("inbox_event_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([sourceSystem, sourceEntityType, sourceEntityId, sourceVersion])
+  @@map("source_entity_versions")
+}
+
+enum OutboxStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+  DEAD_LETTER
+}
+
+model OutboxEvent {
+  id            String       @id @default(uuid()) @db.Uuid
+  aggregateType String       @map("aggregate_type")
+  aggregateId   String       @map("aggregate_id")
+  eventType     String       @map("event_type")
+  payload       Json
+  correlationId String?      @map("correlation_id")
+  status        OutboxStatus @default(PENDING)
+  attempts      Int          @default(0)
+  lastError     String?      @map("last_error")
+  availableAt   DateTime     @default(now()) @map("available_at") @db.Timestamptz(6)
+  publishedAt   DateTime?    @map("published_at") @db.Timestamptz(6)
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([status, availableAt])
+  @@map("outbox_events")
+}
+
+// ───────────────────────────── Security & audit ─────────────────────────────
+
+model User {
+  id          String           @id @default(uuid()) @db.Uuid
+  email       String           @unique
+  displayName String           @map("display_name")
+  active      Boolean          @default(true)
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  roles       RoleAssignment[]
+
+  @@map("users")
+}
+
+/// Role granted to a user, optionally scoped to a company and/or facility (null = all).
+model RoleAssignment {
+  id         String  @id @default(uuid()) @db.Uuid
+  userId     String  @map("user_id") @db.Uuid
+  role       String
+  companyId  String? @map("company_id") @db.Uuid
+  facilityId String? @map("facility_id") @db.Uuid
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, role, companyId, facilityId])
+  @@map("role_assignments")
+}
+
+/// Approval limits per role and document type (in company base currency).
+model ApprovalLimit {
+  id        String  @id @default(uuid()) @db.Uuid
+  companyId String  @map("company_id") @db.Uuid
+  role      String
+  docType   String  @map("doc_type")
+  maxAmount Decimal @map("max_amount") @db.Decimal(20, 4)
+
+  @@unique([companyId, role, docType])
+  @@map("approval_limits")
+}
+
+/// Append-only, hash-chained audit log. seq is gap-free per insert order; hash = sha256(prev_hash || canonical row).
+model AuditLog {
+  seq        BigInt   @id @default(autoincrement())
+  occurredAt DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  actorId    String?  @map("actor_id")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  companyId  String?  @map("company_id") @db.Uuid
+  data       Json     @default("{}")
+  prevHash   String   @map("prev_hash")
+  hash       String   @unique
+
+  @@index([entityType, entityId])
+  @@map("audit_log")
+}
