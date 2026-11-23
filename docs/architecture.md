@@ -75,6 +75,31 @@ Every inbound event uses the envelope in `packages/shared/src/events.ts`:
   `POST /integration/inbox/:id/replay` re-queues after the cause is fixed.
 * Traceability: `GET /integration/trace?journalId=` (downstream → upstream) and `?inboxId=` (upstream → downstream).
 
+## Accounts payable (Increment 2)
+
+```mermaid
+flowchart LR
+  S[supplytrack.supplier.approved] --> SUP[(suppliers)]
+  P[supplytrack.po.approved] --> PO[(purchase_orders + lines)]
+  G[supplytrack.grn.accepted] -->|qty_received += under row lock| PO
+  I[supplytrack.invoice.received] --> DUP{hard duplicate?}
+  DUP -- yes --> DLQ[dead-letter, audit]
+  DUP -- no --> M[matcher: 2/3-way + tolerances]
+  M -- matched --> POST[approve + post: DR expense, DR VAT input / CR AP control]
+  M -- issues --> EXQ[exception queue] -->|override with note| APPR[approve by another person] --> POST
+  POST --> RUN[payment run: preparer → approver → treasury release]
+  RUN -->|bank PAID| PAY[DR AP control / CR bank net / CR WHT payable]
+  RUN -->|bank FAILED| REL[release scheduled amount]
+  PAY -->|bank RETURNED| REV[reverse payment journal, reopen invoice]
+```
+
+* **One liability per valid invoice**: unique `(company, source_system, source_entity_id)` plus the hard-duplicate key `(company, supplier, normalised number, kind)`.
+* **Matching** (`src/ap/matching.ts`) is a pure function; it only reports issues. Routing decides; nothing with an issue is ever posted without a human override and a second approver.
+* **Over-settlement** is prevented three ways: payable = open − retention − amounts scheduled in live runs (checked with invoice rows locked `FOR UPDATE`), the settle step re-checks the open balance, and a DB `CHECK (amount_settled <= total)`.
+* **Bank callbacks** are idempotent: repeating a result is a no-op, and the payment journal is keyed `AP_PAYMENT:<item id>`.
+* **Reconciliation**: the AP control account always equals the sum of open payables (asserted in tests).
+* Reports: supplier ageing (`/ap/ageing`), supplier statement (`/ap/suppliers/:id/statement`), due list (`/ap/due`).
+
 ## Concurrency
 
 * Read Committed + explicit locks. Journal state changes `SELECT … FOR UPDATE` the journal row.
@@ -100,7 +125,7 @@ Every inbound event uses the envelope in `packages/shared/src/events.ts`:
 ## Delivery increments
 
 1. **Foundation & core ledger** (this increment): monorepo, schema, GL posting, periods, inbox/outbox, audit, RBAC, CliniTrack invoice consumer, tests, Compose.
-2. **Accounts payable**: suppliers, PO/GRN/invoice ingestion, 2/3-way match with tolerances and exception queues, duplicate-invoice fingerprints, credit notes, withholding/retention, payment runs, partial settlement, supplier statements.
+2. **Accounts payable** (delivered in Increment 2): suppliers, PO/GRN/invoice ingestion, 2/3-way match with tolerances and exception queues, duplicate-invoice fingerprints, credit notes, withholding/retention, payment runs, partial settlement, supplier statements.
 3. **Receivables & claims**: debtor accounts (payer and patient), claims status vs settlement status, remittance matching at invoice-line level (many-to-many), disputes, promises, provisions, write-offs.
 4. **Payroll liabilities**: signed versioned batches, expense/liability split, pay runs (bank/M-PESA), statutory remittances, replay protection.
 5. **Doctors' fees**: effective-dated contracts, five settlement models, fund statements.

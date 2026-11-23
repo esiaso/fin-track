@@ -40,3 +40,29 @@ export interface TrialBalance {
   rows: { accountId: string; accountCode: string; accountName: string; accountType: string; currency: string; debit: string; credit: string; balance: string }[];
   totals: { currency: string; debit: string; credit: string; balanced: boolean }[];
 }
+
+// ───────────── Accounts payable ─────────────
+export interface SupplierRef { code: string; name: string }
+export interface MatchExceptionRow {
+  id: string; invoiceId: string; lineNo: number | null; type: string; message: string; expected: string | null; actual: string | null;
+  status: 'OPEN' | 'OVERRIDDEN' | 'RESOLVED'; resolvedBy: string | null; note: string | null; createdAt: string;
+  invoice?: { id: string; invoiceNumber: string; total: string; currency: string; supplier: SupplierRef };
+}
+export interface ApInvoiceRow {
+  id: string; invoiceNumber: string; kind: 'INVOICE' | 'CREDIT_NOTE'; invoiceDate: string; dueDate: string; currency: string;
+  subtotal: string; taxAmount: string; total: string; withholdingAmount: string; retentionAmount: string; amountSettled: string; amountOpen: string;
+  status: string; controlState: string; matchType: string; matchStatus: string; journalId: string | null; supplier: SupplierRef; supplierId: string;
+}
+export interface ApInvoiceDetail extends ApInvoiceRow {
+  lines: { id: string; lineNo: number; description: string; qty: string; unitPrice: string; netAmount: string; taxAmount: string; expenseKey: string | null }[];
+  exceptions: MatchExceptionRow[];
+  allocations: { id: string; sourceType: string; amount: string; createdAt: string; reversedAt: string | null; journalId: string | null }[];
+  po: { poNumber: string } | null;
+  sourceEntityId: string; sourceVersion: number;
+}
+export interface DueInvoice { id: string; invoiceNumber: string; supplier: SupplierRef; dueDate: string; currency: string; total: string; amountSettled: string; payable: string; scheduled: string }
+export interface PaymentRunRow {
+  id: string; runNo: string; paymentDate: string; currency: string; method: string; status: string; createdBy: string; approvedBy: string | null;
+  items: { id?: string; amount: string; status: string; withholding?: string; netPaid?: string; bankReference?: string | null; failureReason?: string | null; invoice?: { invoiceNumber: string; supplier: SupplierRef } }[];
+}
+export interface AgeingRow { supplier: { id: string; code: string; name: string }; currency: string; current: string; d1_30: string; d31_60: string; d61_90: string; d90_plus: string; total: string }

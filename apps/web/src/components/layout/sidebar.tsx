@@ -9,7 +9,11 @@ import { NAV } from './nav';
 
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const pathname = usePathname();
-  const isActive = (href: string) => (href === '/' ? pathname === '/' : pathname === href || (href !== '/journals' && pathname.startsWith(href + '/')) || (href === '/journals' && /^\/journals\/(?!new)/.test(pathname)) || pathname === href);
+  const isActive = (href: string) => {
+    if (href === '/') return pathname === '/';
+    if (href === '/journals') return pathname === '/journals' || /^\/journals\/(?!new)/.test(pathname);
+    return pathname === href || pathname.startsWith(href + '/');
+  };
 
   return (
     <>

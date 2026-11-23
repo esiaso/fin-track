@@ -45,3 +45,83 @@ export const CliniTrackInvoiceFinalizedPayload = z.object({
     .min(1),
 });
 export type CliniTrackInvoiceFinalizedPayload = z.infer<typeof CliniTrackInvoiceFinalizedPayload>;
+
+// ───────────── SupplyTrack payloads (Increment 2) ─────────────
+const qty = z.string().regex(/^\d{1,16}(\.\d{1,4})?$/, 'quantity must be a decimal string with <=4dp');
+const rate = z.string().regex(/^0(\.\d{1,6})?$|^1(\.0{1,6})?$/, 'rate must be a fraction between 0 and 1');
+
+export const SupplierApprovedPayload = z.object({
+  company_code: z.string().min(1),
+  supplier_id: z.string().min(1),
+  code: z.string().min(1).max(40),
+  name: z.string().min(1).max(200),
+  tax_pin: z.string().max(40).optional(),
+  currency: z.string().length(3),
+  payment_terms_days: z.number().int().min(0).max(365),
+  withholding_rate: rate.default('0'),
+  payee_ref: z.string().max(120).optional(),
+  status: z.enum(['ACTIVE', 'BLOCKED']).default('ACTIVE'),
+});
+export type SupplierApprovedPayload = z.infer<typeof SupplierApprovedPayload>;
+
+export const PurchaseOrderApprovedPayload = z.object({
+  company_code: z.string().min(1),
+  po_number: z.string().min(1),
+  supplier_id: z.string().min(1),
+  currency: z.string().length(3),
+  order_date: z.string().date(),
+  lines: z
+    .array(
+      z.object({
+        line_ref: z.string().min(1),
+        item_ref: z.string().optional(),
+        description: z.string().min(1),
+        qty: qty,
+        unit_price: amount,
+        tax_rate: rate.default('0'),
+        expense_key: z.string().optional(),
+      }),
+    )
+    .min(1),
+});
+export type PurchaseOrderApprovedPayload = z.infer<typeof PurchaseOrderApprovedPayload>;
+
+export const GoodsReceivedPayload = z.object({
+  company_code: z.string().min(1),
+  grn_number: z.string().min(1),
+  po_number: z.string().min(1),
+  kind: z.enum(['GOODS', 'SERVICE']).default('GOODS'),
+  received_date: z.string().date(),
+  lines: z.array(z.object({ po_line_ref: z.string().min(1), qty_accepted: qty })).min(1),
+});
+export type GoodsReceivedPayload = z.infer<typeof GoodsReceivedPayload>;
+
+export const SupplierInvoicePayload = z.object({
+  company_code: z.string().min(1),
+  supplier_id: z.string().min(1),
+  invoice_number: z.string().min(1).max(60),
+  kind: z.enum(['INVOICE', 'CREDIT_NOTE']).default('INVOICE'),
+  /// For credit notes: the supplier invoice number being credited.
+  credits_invoice_number: z.string().optional(),
+  po_number: z.string().optional(),
+  match_type: z.enum(['TWO_WAY', 'THREE_WAY', 'NON_PO']).default('THREE_WAY'),
+  invoice_date: z.string().date(),
+  currency: z.string().length(3),
+  subtotal: amount,
+  tax_amount: amount,
+  total: amount,
+  retention_amount: amount.default('0'),
+  lines: z
+    .array(
+      z.object({
+        po_line_ref: z.string().optional(),
+        description: z.string().min(1),
+        qty: qty,
+        unit_price: amount,
+        tax_amount: amount,
+        expense_key: z.string().optional(),
+      }),
+    )
+    .min(1),
+});
+export type SupplierInvoicePayload = z.infer<typeof SupplierInvoicePayload>;

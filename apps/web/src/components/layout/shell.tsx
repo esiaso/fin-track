@@ -10,7 +10,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const all = NAV.flatMap((g) => g.items);
-  const title = all.find((i) => i.href === pathname)?.title ?? (pathname.startsWith('/journals/') ? 'Journal' : 'FinTrack');
+  const title =
+    all.find((i) => i.href === pathname)?.title ??
+    all.filter((i) => i.href !== '/' && pathname.startsWith(i.href + '/')).sort((a, b) => b.href.length - a.href.length)[0]?.title ??
+    'FinTrack';
   return (
     <div className="flex min-h-screen">
       <Sidebar open={open} onClose={() => setOpen(false)} />

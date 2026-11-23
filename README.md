@@ -5,7 +5,11 @@ Financial system of record for multi-facility hospitals, part of the SynergyOne 
 
 Source applications own operational workflows; FinTrack owns financial posting, settlement and reconciled balances.
 
-## What is in this increment (1 of 8)
+## Delivered so far
+
+**Increment 2: Accounts payable.** SupplyTrack suppliers, POs, GRNs, supplier invoices and credit notes; 2/3-way matching with configurable tolerances and an exception queue; duplicate-invoice protection; AP posting with VAT and withholding; payment runs with maker-checker, partial settlement, bank/M-PESA result handling and returns; supplier ageing and statements; AP screens.
+
+## Increment 1 (foundation)
 
 * **Monorepo**: `apps/api` (NestJS 11, Prisma 6, PostgreSQL 16, BullMQ), `apps/web` (Next.js 15, Tailwind, TanStack Query, RHF + Zod, Recharts), `packages/shared`.
 * **Core ledger**: companies, facilities, departments, chart of accounts with control accounts, account mappings, fiscal periods with soft-close/lock,
