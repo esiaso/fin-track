@@ -31,11 +31,13 @@ export async function seedReference(prisma: PrismaClient, suffix = '') {
     ['1110', 'Debtors - Private Insurers', 'ASSET', 'AR_CONTROL'],
     ['1120', 'Debtors - Corporate', 'ASSET', 'AR_CONTROL'],
     ['1130', 'Debtors - Patients', 'ASSET', 'AR_CONTROL'],
+    ['1400', 'VAT Input Recoverable', 'ASSET'],
     ['1500', 'Prepayments', 'ASSET'],
     ['1999', 'Suspense', 'ASSET', 'SUSPENSE'],
     ['2000', 'Trade Creditors', 'LIABILITY', 'AP_CONTROL'],
     ['2100', 'Net Salaries Payable', 'LIABILITY', 'PAYROLL_CONTROL'],
     ['2110', 'PAYE Payable', 'LIABILITY', 'STATUTORY_CONTROL'],
+    ['2120', 'Withholding Tax Payable', 'LIABILITY', 'STATUTORY_CONTROL'],
     ['2200', 'Doctors Fund Payable', 'LIABILITY', 'DOCTOR_FUND_CONTROL'],
     ['2300', 'Accrued Expenses', 'LIABILITY'],
     ['3000', 'Retained Earnings', 'EQUITY'],
@@ -64,6 +66,14 @@ export async function seedReference(prisma: PrismaClient, suffix = '') {
     ['REVENUE:CONSULTATION', '4000'],
     ['REVENUE:LAB', '4010'],
     ['REVENUE:PHARMACY', '4020'],
+    ['AP_CONTROL', '2000'],
+    ['VAT_INPUT', '1400'],
+    ['WHT_PAYABLE', '2120'],
+    ['AP_EXPENSE:DEFAULT', '6000'],
+    ['AP_EXPENSE:MEDICAL_SUPPLIES', '6000'],
+    ['AP_EXPENSE:UTILITIES', '6100'],
+    ['BANK:DEFAULT', '1000'],
+    ['BANK:MPESA', '1050'],
   ];
   await prisma.accountMapping.createMany({ data: maps.map(([mappingKey, code]) => ({ companyId: company.id, mappingKey, accountId: accounts[code] })) });
 
@@ -86,6 +96,8 @@ export async function seedReference(prisma: PrismaClient, suffix = '') {
     checker: await mk('chief@demo.fintrack.local', 'Brian Chief Accountant', 'CHIEF_ACCOUNTANT'),
     controller: await mk('controller@demo.fintrack.local', 'Carol Finance Controller', 'FINANCE_CONTROLLER'),
     auditor: await mk('auditor@demo.fintrack.local', 'Dan Internal Auditor', 'AUDITOR'),
+    apOfficer: await mk('ap.officer@demo.fintrack.local', 'Faith AP Officer', 'AP_OFFICER'),
+    treasury: await mk('treasury@demo.fintrack.local', 'George Treasury Officer', 'TREASURY_OFFICER'),
     ksmAccountant: await mk('ksm.accountant@demo.fintrack.local', 'Esther KSM Accountant', 'ACCOUNTANT', ksm.id),
   };
 

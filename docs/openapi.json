@@ -808,6 +808,578 @@
           "ops"
         ]
       }
+    },
+    "/api/v1/ap/suppliers": {
+      "get": {
+        "operationId": "ApController_suppliers",
+        "parameters": [
+          {
+            "name": "companyId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "accounts-payable"
+        ]
+      }
+    },
+    "/api/v1/ap/suppliers/{id}/statement": {
+      "get": {
+        "operationId": "ApController_statement",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "accounts-payable"
+        ]
+      }
+    },
+    "/api/v1/ap/invoices": {
+      "get": {
+        "operationId": "ApController_invoices",
+        "parameters": [
+          {
+            "name": "companyId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "matchStatus",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "supplierId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "accounts-payable"
+        ]
+      }
+    },
+    "/api/v1/ap/invoices/{id}": {
+      "get": {
+        "operationId": "ApController_invoice",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "accounts-payable"
+        ]
+      }
+    },
+    "/api/v1/ap/invoices/{id}/approve": {
+      "post": {
+        "operationId": "ApController_approve",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Approve and post an invoice whose match exceptions were overridden (approver must differ from overrider)",
+        "tags": [
+          "accounts-payable"
+        ]
+      }
+    },
+    "/api/v1/ap/invoices/{id}/control": {
+      "post": {
+        "operationId": "ApController_control",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ControlDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Place on hold / dispute (ap:manage) or release (ap:approve)",
+        "tags": [
+          "accounts-payable"
+        ]
+      }
+    },
+    "/api/v1/ap/exceptions": {
+      "get": {
+        "operationId": "ApController_exceptions",
+        "parameters": [
+          {
+            "name": "companyId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "accounts-payable"
+        ]
+      }
+    },
+    "/api/v1/ap/exceptions/{id}/override": {
+      "post": {
+        "operationId": "ApController_override",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "accounts-payable"
+        ]
+      }
+    },
+    "/api/v1/ap/due": {
+      "get": {
+        "operationId": "ApController_due",
+        "parameters": [
+          {
+            "name": "companyId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "asOf",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "accounts-payable"
+        ]
+      }
+    },
+    "/api/v1/ap/ageing": {
+      "get": {
+        "operationId": "ApController_ageing",
+        "parameters": [
+          {
+            "name": "companyId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "asOf",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "accounts-payable"
+        ]
+      }
+    },
+    "/api/v1/ap/payment-runs": {
+      "get": {
+        "operationId": "ApController_runs",
+        "parameters": [
+          {
+            "name": "companyId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "accounts-payable"
+        ]
+      },
+      "post": {
+        "operationId": "ApController_createRun",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRunDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "accounts-payable"
+        ]
+      }
+    },
+    "/api/v1/ap/payment-runs/{id}": {
+      "get": {
+        "operationId": "ApController_run",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "accounts-payable"
+        ]
+      }
+    },
+    "/api/v1/ap/payment-runs/{id}/approve": {
+      "post": {
+        "operationId": "ApController_approveRun",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "accounts-payable"
+        ]
+      }
+    },
+    "/api/v1/ap/payment-runs/{id}/execute": {
+      "post": {
+        "operationId": "ApController_executeRun",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "accounts-payable"
+        ]
+      }
+    },
+    "/api/v1/ap/payment-runs/{id}/cancel": {
+      "post": {
+        "operationId": "ApController_cancelRun",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "accounts-payable"
+        ]
+      }
+    },
+    "/api/v1/ap/payment-items/{id}/result": {
+      "post": {
+        "operationId": "ApController_result",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemResultDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Record bank / M-PESA result for a payment item (idempotent)",
+        "tags": [
+          "accounts-payable"
+        ]
+      }
     }
   },
   "info": {
@@ -1013,6 +1585,120 @@
         },
         "required": [
           "reason"
+        ]
+      },
+      "ControlDto": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "NONE",
+              "DISPUTED",
+              "ON_HOLD"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "reason"
+        ]
+      },
+      "NoteDto": {
+        "type": "object",
+        "properties": {
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "note"
+        ]
+      },
+      "RunItemDto": {
+        "type": "object",
+        "properties": {
+          "invoiceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "amount": {
+            "type": "string",
+            "example": "1000.00"
+          }
+        },
+        "required": [
+          "invoiceId",
+          "amount"
+        ]
+      },
+      "CreateRunDto": {
+        "type": "object",
+        "properties": {
+          "companyId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "paymentDate": {
+            "type": "string",
+            "example": "2026-11-30"
+          },
+          "currency": {
+            "type": "string",
+            "example": "KES"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "BANK_TRANSFER",
+              "MPESA",
+              "CHEQUE"
+            ]
+          },
+          "bankMappingKey": {
+            "type": "string",
+            "example": "BANK:DEFAULT"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunItemDto"
+            }
+          }
+        },
+        "required": [
+          "companyId",
+          "paymentDate",
+          "currency",
+          "items"
+        ]
+      },
+      "ItemResultDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "PAID",
+              "FAILED"
+            ],
+            "description": "FAILED on a PAID item records a bank return and reverses the payment"
+          },
+          "bankReference": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "valueDate": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
         ]
       }
     }

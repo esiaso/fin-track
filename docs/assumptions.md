@@ -43,13 +43,26 @@ Items marked *(Inc N)* apply to a later increment but are listed now so policy c
 | A-INT-03 | Account mappings: `AR_CONTROL:<debtor_type>` and `REVENUE:<service mapping key>` per company. Missing mapping → retry then dead-letter. | Implemented | |
 | A-FX-01 | Foreign-currency source documents are rejected until an approved FX-rate source (CBK daily rate?) is configured. | Rejected (non-retryable) | |
 
+## Accounts payable (Increment 2)
+
+| ID | Assumption | Default implemented | Sign-off |
+|---|---|---|---|
+| A-AP-01 | Match tolerances per company (`ap_tolerances`): quantity 0%; unit price within 2% **and** line variance ≤ KES 500 (the stricter wins); tax ±KES 1 per line; header arithmetic exact; currency must equal PO currency. | Implemented, configurable | |
+| A-AP-02 | Hard duplicate = same company + supplier + normalised invoice number (case, spaces, punctuation and leading zeros ignored) + document kind → rejected to dead-letter, never posted. Soft duplicate = same supplier + invoice date + gross + currency with a different number → accepted into the exception queue. | Implemented | |
+| A-AP-03 | VAT is recognised as input VAT at invoice posting. Withholding tax is computed from the supplier's rate × invoice subtotal and recognised at payment (CR WHT payable), pro-rata for partial payments with the final payment taking the remainder. | Implemented | |
+| A-AP-04 | Expense is recognised at invoice posting (DR expense mapping from the invoice line or PO line, default `AP_EXPENSE:DEFAULT`). No GRNI accrual at goods receipt yet; month-end accrual of received-not-invoiced goods can be added if required. | Implemented | |
+| A-AP-05 | Invoices that match within tolerance are system-approved and posted automatically (`auto_post_matched = true`), because the PO was approved in SupplyTrack. Any exception requires a human override with a note **and** a different person to approve. | Implemented, configurable | |
+| A-AP-06 | Non-PO invoices are allowed only through a NON_PO_APPROVAL exception, which cannot be overridden until every line carries an expense code. | Implemented | |
+| A-AP-07 | A corrected supplier invoice (higher source version) replaces the earlier version only if it is not yet posted; after posting, corrections must come as a supplier credit note. | Implemented | |
+| A-AP-08 | Credit notes are applied automatically to the original invoice up to its open amount not already scheduled for payment; any excess stays as an unapplied supplier credit. | Implemented | |
+| A-AP-09 | Retention is withheld from "payable now" until released (release workflow to be added). | Implemented (no release yet) | |
+| A-AP-10 | Payment runs: preparer (AP officer) ≠ approver (Chief Accountant / Finance Controller); release to bank by Treasury or Finance Controller, also ≠ preparer. Postings happen only when the bank/M-PESA confirms a payment; a later bank return reverses the payment journal and reopens the invoice. | Implemented | |
+| A-AP-11 | Approval limits apply with doc types `AP_INVOICE` and `PAYMENT_RUN` when configured (base currency). | Implemented | |
+
 ## Later increments: policy decisions needed before build
 
 | ID | Question | Proposed default |
 |---|---|---|
-| A-AP-01 *(Inc 2)* | 3-way match tolerances | Qty 0%, price ±2% or KES 500 (lower), tax exact, currency must match |
-| A-AP-02 *(Inc 2)* | Duplicate invoice fingerprint | supplier + normalised invoice no + company; secondary fingerprint supplier + date + gross amount flagged for review |
-| A-AP-03 *(Inc 2)* | Withholding tax/VAT | WHT recognised at payment; VAT input at invoice |
 | A-AR-01 *(Inc 3)* | Patient vs payer split | Single invoice split into payer portion and patient co-pay portion as separate open items; never both |
 | A-AR-02 *(Inc 3)* | Provisioning | Ageing-based matrix (e.g. 0–90: 0%, 91–180: 25%, 181–365: 50%, >365: 100%); write-offs need Finance Controller + CEO above threshold |
 | A-PAY-01 *(Inc 4)* | Payroll partial payment | Not allowed by default; per-employee rejected payments re-queued |

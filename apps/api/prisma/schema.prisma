@@ -25,12 +25,12 @@ model Company {
   active       Boolean  @default(true)
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  facilities     Facility[]
-  accounts       Account[]
-  periods        FiscalPeriod[]
-  journals       Journal[]
-  accountMaps    AccountMapping[]
-  sequences      DocumentSequence[]
+  facilities  Facility[]
+  accounts    Account[]
+  periods     FiscalPeriod[]
+  journals    Journal[]
+  accountMaps AccountMapping[]
+  sequences   DocumentSequence[]
 
   @@map("companies")
 }
@@ -108,9 +108,9 @@ model Account {
   active        Boolean            @default(true)
   createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  company  Company       @relation(fields: [companyId], references: [id])
-  parent   Account?      @relation("AccountTree", fields: [parentId], references: [id])
-  children Account[]     @relation("AccountTree")
+  company  Company          @relation(fields: [companyId], references: [id])
+  parent   Account?         @relation("AccountTree", fields: [parentId], references: [id])
+  children Account[]        @relation("AccountTree")
   lines    JournalLine[]
   mappings AccountMapping[]
 
@@ -178,40 +178,40 @@ enum JournalSource {
 }
 
 model Journal {
-  id              String        @id @default(uuid()) @db.Uuid
-  companyId       String        @map("company_id") @db.Uuid
-  facilityId      String?       @map("facility_id") @db.Uuid
-  journalNo       String?       @map("journal_no")
-  journalDate     DateTime      @map("journal_date") @db.Date
-  periodId        String        @map("period_id") @db.Uuid
-  description     String
-  status          JournalStatus @default(DRAFT)
-  source          JournalSource @default(MANUAL)
-  sourceEntityType String?      @map("source_entity_type")
-  sourceEntityId  String?       @map("source_entity_id")
-  sourceVersion   Int?          @map("source_version")
-  sourceEventId   String?       @map("source_event_id") @db.Uuid
-  correlationId   String?       @map("correlation_id")
+  id               String        @id @default(uuid()) @db.Uuid
+  companyId        String        @map("company_id") @db.Uuid
+  facilityId       String?       @map("facility_id") @db.Uuid
+  journalNo        String?       @map("journal_no")
+  journalDate      DateTime      @map("journal_date") @db.Date
+  periodId         String        @map("period_id") @db.Uuid
+  description      String
+  status           JournalStatus @default(DRAFT)
+  source           JournalSource @default(MANUAL)
+  sourceEntityType String?       @map("source_entity_type")
+  sourceEntityId   String?       @map("source_entity_id")
+  sourceVersion    Int?          @map("source_version")
+  sourceEventId    String?       @map("source_event_id") @db.Uuid
+  correlationId    String?       @map("correlation_id")
   /// Caller-provided or derived key; unique per company. Guarantees reruns never duplicate postings.
-  idempotencyKey  String        @map("idempotency_key")
-  reversalOfId    String?       @unique @map("reversal_of_id") @db.Uuid
-  createdBy       String        @map("created_by") @db.Uuid
-  validatedAt     DateTime?     @map("validated_at") @db.Timestamptz(6)
-  approvedBy      String?       @map("approved_by") @db.Uuid
-  approvedAt      DateTime?     @map("approved_at") @db.Timestamptz(6)
-  postedBy        String?       @map("posted_by") @db.Uuid
-  postedAt        DateTime?     @map("posted_at") @db.Timestamptz(6)
-  reversedAt      DateTime?     @map("reversed_at") @db.Timestamptz(6)
+  idempotencyKey   String        @map("idempotency_key")
+  reversalOfId     String?       @unique @map("reversal_of_id") @db.Uuid
+  createdBy        String        @map("created_by") @db.Uuid
+  validatedAt      DateTime?     @map("validated_at") @db.Timestamptz(6)
+  approvedBy       String?       @map("approved_by") @db.Uuid
+  approvedAt       DateTime?     @map("approved_at") @db.Timestamptz(6)
+  postedBy         String?       @map("posted_by") @db.Uuid
+  postedAt         DateTime?     @map("posted_at") @db.Timestamptz(6)
+  reversedAt       DateTime?     @map("reversed_at") @db.Timestamptz(6)
   /// SHA-256 over the canonical posted content (header + lines); set at posting.
-  contentHash     String?       @map("content_hash")
-  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  contentHash      String?       @map("content_hash")
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  company     Company        @relation(fields: [companyId], references: [id])
-  period      FiscalPeriod   @relation(fields: [periodId], references: [id])
+  company     Company       @relation(fields: [companyId], references: [id])
+  period      FiscalPeriod  @relation(fields: [periodId], references: [id])
   lines       JournalLine[]
-  reversalOf  Journal?       @relation("Reversal", fields: [reversalOfId], references: [id])
-  reversedBy  Journal?       @relation("Reversal")
-  sourceEvent InboxEvent?    @relation(fields: [sourceEventId], references: [id])
+  reversalOf  Journal?      @relation("Reversal", fields: [reversalOfId], references: [id])
+  reversedBy  Journal?      @relation("Reversal")
+  sourceEvent InboxEvent?   @relation(fields: [sourceEventId], references: [id])
 
   @@unique([companyId, idempotencyKey])
   @@unique([companyId, journalNo])
@@ -407,4 +407,363 @@ model AuditLog {
 
   @@index([entityType, entityId])
   @@map("audit_log")
+}
+
+// ═════════════════════════════ Increment 2: Accounts payable ═════════════════════════════
+
+/// Lifecycle for sub-ledger documents (see packages/shared/src/statuses.ts).
+enum DocStatus {
+  DRAFT
+  VALIDATED
+  APPROVED
+  POSTED
+  PARTIALLY_SETTLED
+  SETTLED
+  REVERSED
+}
+
+enum ControlState {
+  NONE
+  DISPUTED
+  ON_HOLD
+}
+
+enum SupplierStatus {
+  ACTIVE
+  BLOCKED
+}
+
+model Supplier {
+  id               String         @id @default(uuid()) @db.Uuid
+  companyId        String         @map("company_id") @db.Uuid
+  sourceSystem     String         @default("SUPPLYTRACK") @map("source_system")
+  sourceSupplierId String         @map("source_supplier_id")
+  code             String
+  name             String
+  taxPin           String?        @map("tax_pin")
+  currency         String         @db.Char(3)
+  paymentTermsDays Int            @default(30) @map("payment_terms_days")
+  /// Withholding rate applied at payment (e.g. 0.05). 0 = none. (A-AP-03)
+  withholdingRate  Decimal        @default(0) @map("withholding_rate") @db.Decimal(7, 6)
+  /// Opaque reference to bank/M-PESA details held in the payments vault; never raw account numbers.
+  payeeRef         String?        @map("payee_ref")
+  status           SupplierStatus @default(ACTIVE)
+  sourceVersion    Int            @default(1) @map("source_version")
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  purchaseOrders PurchaseOrder[]
+  invoices       ApInvoice[]
+
+  @@unique([companyId, sourceSystem, sourceSupplierId])
+  @@unique([companyId, code])
+  @@map("suppliers")
+}
+
+model PurchaseOrder {
+  id            String   @id @default(uuid()) @db.Uuid
+  companyId     String   @map("company_id") @db.Uuid
+  facilityId    String   @map("facility_id") @db.Uuid
+  supplierId    String   @map("supplier_id") @db.Uuid
+  poNumber      String   @map("po_number")
+  sourceId      String   @map("source_id")
+  currency      String   @db.Char(3)
+  orderDate     DateTime @map("order_date") @db.Date
+  status        String   @default("APPROVED") // APPROVED | CLOSED | CANCELLED (owned by SupplyTrack)
+  sourceVersion Int      @map("source_version")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  supplier Supplier            @relation(fields: [supplierId], references: [id])
+  lines    PurchaseOrderLine[]
+  receipts GoodsReceipt[]
+  invoices ApInvoice[]
+
+  @@unique([companyId, sourceId])
+  @@unique([companyId, poNumber])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderLine {
+  id          String  @id @default(uuid()) @db.Uuid
+  poId        String  @map("po_id") @db.Uuid
+  lineRef     String  @map("line_ref")
+  itemRef     String? @map("item_ref")
+  description String
+  qtyOrdered  Decimal @map("qty_ordered") @db.Decimal(20, 4)
+  unitPrice   Decimal @map("unit_price") @db.Decimal(20, 4)
+  taxRate     Decimal @default(0) @map("tax_rate") @db.Decimal(7, 6)
+  /// Running totals maintained under row lock.
+  qtyReceived Decimal @default(0) @map("qty_received") @db.Decimal(20, 4)
+  qtyInvoiced Decimal @default(0) @map("qty_invoiced") @db.Decimal(20, 4)
+  expenseKey  String? @map("expense_key") // account mapping key, e.g. AP_EXPENSE:MEDICAL_SUPPLIES
+
+  po           PurchaseOrder      @relation(fields: [poId], references: [id])
+  receiptLines GoodsReceiptLine[]
+  invoiceLines ApInvoiceLine[]
+
+  @@unique([poId, lineRef])
+  @@map("purchase_order_lines")
+}
+
+enum ReceiptKind {
+  GOODS
+  SERVICE
+}
+
+model GoodsReceipt {
+  id           String      @id @default(uuid()) @db.Uuid
+  companyId    String      @map("company_id") @db.Uuid
+  poId         String      @map("po_id") @db.Uuid
+  grnNumber    String      @map("grn_number")
+  sourceId     String      @map("source_id")
+  kind         ReceiptKind @default(GOODS)
+  receivedDate DateTime    @map("received_date") @db.Date
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  po    PurchaseOrder      @relation(fields: [poId], references: [id])
+  lines GoodsReceiptLine[]
+
+  @@unique([companyId, sourceId])
+  @@map("goods_receipts")
+}
+
+model GoodsReceiptLine {
+  id          String  @id @default(uuid()) @db.Uuid
+  receiptId   String  @map("receipt_id") @db.Uuid
+  poLineId    String  @map("po_line_id") @db.Uuid
+  qtyAccepted Decimal @map("qty_accepted") @db.Decimal(20, 4)
+
+  receipt GoodsReceipt      @relation(fields: [receiptId], references: [id])
+  poLine  PurchaseOrderLine @relation(fields: [poLineId], references: [id])
+
+  @@map("goods_receipt_lines")
+}
+
+/// Matching tolerances per company (A-AP-01). Percentages as fractions (0.02 = 2%).
+model ApTolerance {
+  companyId       String   @id @map("company_id") @db.Uuid
+  qtyPct          Decimal  @default(0) @map("qty_pct") @db.Decimal(7, 6)
+  pricePct        Decimal  @default(0.02) @map("price_pct") @db.Decimal(7, 6)
+  priceAbs        Decimal  @default(500) @map("price_abs") @db.Decimal(20, 4)
+  taxAbs          Decimal  @default(1) @map("tax_abs") @db.Decimal(20, 4)
+  /// Post matched invoices automatically (upstream approval already happened).
+  autoPostMatched Boolean  @default(true) @map("auto_post_matched")
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("ap_tolerances")
+}
+
+enum ApDocKind {
+  INVOICE
+  CREDIT_NOTE
+}
+
+enum MatchType {
+  TWO_WAY
+  THREE_WAY
+  NON_PO
+}
+
+enum MatchStatus {
+  PENDING
+  MATCHED
+  EXCEPTION
+  OVERRIDDEN
+}
+
+model ApInvoice {
+  id                String       @id @default(uuid()) @db.Uuid
+  companyId         String       @map("company_id") @db.Uuid
+  facilityId        String       @map("facility_id") @db.Uuid
+  supplierId        String       @map("supplier_id") @db.Uuid
+  poId              String?      @map("po_id") @db.Uuid
+  kind              ApDocKind    @default(INVOICE)
+  invoiceNumber     String       @map("invoice_number")
+  /// Upper-cased, punctuation/whitespace stripped, leading zeros removed. Hard duplicate key.
+  normalizedNumber  String       @map("normalized_number")
+  /// sha256(supplier|invoice date|gross total|currency): soft-duplicate detector.
+  fingerprint       String
+  invoiceDate       DateTime     @map("invoice_date") @db.Date
+  dueDate           DateTime     @map("due_date") @db.Date
+  currency          String       @db.Char(3)
+  subtotal          Decimal      @db.Decimal(20, 4)
+  taxAmount         Decimal      @map("tax_amount") @db.Decimal(20, 4)
+  total             Decimal      @db.Decimal(20, 4)
+  /// Withholding expected at payment (supplier rate x subtotal). Recorded separately from tax.
+  withholdingAmount Decimal      @default(0) @map("withholding_amount") @db.Decimal(20, 4)
+  retentionAmount   Decimal      @default(0) @map("retention_amount") @db.Decimal(20, 4)
+  amountSettled     Decimal      @default(0) @map("amount_settled") @db.Decimal(20, 4)
+  status            DocStatus    @default(DRAFT)
+  controlState      ControlState @default(NONE) @map("control_state")
+  matchType         MatchType    @map("match_type")
+  matchStatus       MatchStatus  @default(PENDING) @map("match_status")
+  creditForId       String?      @map("credit_for_id") @db.Uuid
+  journalId         String?      @unique @map("journal_id") @db.Uuid
+  sourceSystem      String       @default("SUPPLYTRACK") @map("source_system")
+  sourceEntityId    String       @map("source_entity_id")
+  sourceVersion     Int          @map("source_version")
+  approvedBy        String?      @map("approved_by") @db.Uuid
+  approvedAt        DateTime?    @map("approved_at") @db.Timestamptz(6)
+  postedAt          DateTime?    @map("posted_at") @db.Timestamptz(6)
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  supplier    Supplier         @relation(fields: [supplierId], references: [id])
+  po          PurchaseOrder?   @relation(fields: [poId], references: [id])
+  creditFor   ApInvoice?       @relation("CreditNote", fields: [creditForId], references: [id])
+  creditNotes ApInvoice[]      @relation("CreditNote")
+  lines       ApInvoiceLine[]
+  exceptions  MatchException[]
+  allocations ApAllocation[]   @relation("AllocTarget")
+  runItems    PaymentRunItem[]
+
+  @@unique([companyId, supplierId, normalizedNumber, kind])
+  @@unique([companyId, sourceSystem, sourceEntityId])
+  @@index([companyId, supplierId, fingerprint])
+  @@index([companyId, status, dueDate])
+  @@map("ap_invoices")
+}
+
+model ApInvoiceLine {
+  id          String  @id @default(uuid()) @db.Uuid
+  invoiceId   String  @map("invoice_id") @db.Uuid
+  lineNo      Int     @map("line_no")
+  poLineId    String? @map("po_line_id") @db.Uuid
+  description String
+  qty         Decimal @db.Decimal(20, 4)
+  unitPrice   Decimal @map("unit_price") @db.Decimal(20, 4)
+  netAmount   Decimal @map("net_amount") @db.Decimal(20, 4)
+  taxAmount   Decimal @map("tax_amount") @db.Decimal(20, 4)
+  expenseKey  String? @map("expense_key")
+
+  invoice ApInvoice          @relation(fields: [invoiceId], references: [id])
+  poLine  PurchaseOrderLine? @relation(fields: [poLineId], references: [id])
+
+  @@unique([invoiceId, lineNo])
+  @@map("ap_invoice_lines")
+}
+
+enum ExceptionType {
+  QTY
+  PRICE
+  TAX
+  TOTAL
+  CURRENCY
+  NO_RECEIPT
+  NO_PO_LINE
+  NON_PO_APPROVAL
+  DUPLICATE_SUSPECT
+  SUPPLIER_BLOCKED
+}
+
+enum ExceptionStatus {
+  OPEN
+  OVERRIDDEN
+  RESOLVED
+}
+
+model MatchException {
+  id         String          @id @default(uuid()) @db.Uuid
+  invoiceId  String          @map("invoice_id") @db.Uuid
+  lineNo     Int?            @map("line_no")
+  type       ExceptionType
+  message    String
+  expected   String?
+  actual     String?
+  status     ExceptionStatus @default(OPEN)
+  resolvedBy String?         @map("resolved_by") @db.Uuid
+  resolvedAt DateTime?       @map("resolved_at") @db.Timestamptz(6)
+  note       String?
+  createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  invoice ApInvoice @relation(fields: [invoiceId], references: [id])
+
+  @@index([status, type])
+  @@map("ap_match_exceptions")
+}
+
+enum PaymentRunStatus {
+  DRAFT
+  APPROVED
+  EXECUTING
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  MPESA
+  CHEQUE
+}
+
+model PaymentRun {
+  id             String           @id @default(uuid()) @db.Uuid
+  companyId      String           @map("company_id") @db.Uuid
+  runNo          String           @map("run_no")
+  paymentDate    DateTime         @map("payment_date") @db.Date
+  currency       String           @db.Char(3)
+  method         PaymentMethod    @default(BANK_TRANSFER)
+  bankMappingKey String           @default("BANK:DEFAULT") @map("bank_mapping_key")
+  status         PaymentRunStatus @default(DRAFT)
+  createdBy      String           @map("created_by") @db.Uuid
+  approvedBy     String?          @map("approved_by") @db.Uuid
+  approvedAt     DateTime?        @map("approved_at") @db.Timestamptz(6)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  items PaymentRunItem[]
+
+  @@unique([companyId, runNo])
+  @@map("ap_payment_runs")
+}
+
+enum PaymentItemStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+}
+
+model PaymentRunItem {
+  id            String            @id @default(uuid()) @db.Uuid
+  runId         String            @map("run_id") @db.Uuid
+  invoiceId     String            @map("invoice_id") @db.Uuid
+  /// Amount of the liability being settled (gross of withholding).
+  amount        Decimal           @db.Decimal(20, 4)
+  withholding   Decimal           @default(0) @db.Decimal(20, 4)
+  /// Cash actually disbursed = amount - withholding.
+  netPaid       Decimal           @map("net_paid") @db.Decimal(20, 4)
+  status        PaymentItemStatus @default(PENDING)
+  bankReference String?           @map("bank_reference")
+  failureReason String?           @map("failure_reason")
+  journalId     String?           @map("journal_id") @db.Uuid
+  allocationId  String?           @unique @map("allocation_id") @db.Uuid
+  updatedAt     DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  run     PaymentRun @relation(fields: [runId], references: [id])
+  invoice ApInvoice  @relation(fields: [invoiceId], references: [id])
+
+  @@index([invoiceId, status])
+  @@map("ap_payment_run_items")
+}
+
+enum AllocationSource {
+  PAYMENT
+  CREDIT_NOTE
+}
+
+/// Settlement of a payable: by a payment item or a credit note. Reversal sets reversedAt (never deleted).
+model ApAllocation {
+  id         String           @id @default(uuid()) @db.Uuid
+  invoiceId  String           @map("invoice_id") @db.Uuid
+  sourceType AllocationSource @map("source_type")
+  sourceId   String           @map("source_id") @db.Uuid
+  amount     Decimal          @db.Decimal(20, 4)
+  journalId  String?          @map("journal_id") @db.Uuid
+  createdBy  String           @map("created_by") @db.Uuid
+  createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  reversedAt DateTime?        @map("reversed_at") @db.Timestamptz(6)
+
+  invoice ApInvoice @relation("AllocTarget", fields: [invoiceId], references: [id])
+
+  @@index([invoiceId])
+  @@map("ap_allocations")
 }

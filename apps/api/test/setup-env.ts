@@ -5,3 +5,4 @@ process.env.INTEGRATION_SECRET_CLINITRACK = 'clini-test-secret';
 process.env.INBOX_MAX_ATTEMPTS = '3';
 process.env.NODE_ENV = 'test';
 process.env.LOG_LEVEL = 'silent';
+process.env.INTEGRATION_SECRET_SUPPLYTRACK = 'supply-test-secret';
